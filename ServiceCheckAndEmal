@@ -1,4 +1,4 @@
-#Server list array
+#Server and service list array
 $Servers = @("Server01.foo.com",”Server02.foo.com”,”Server03.foo.com”)
 $Services = @("IISADMIN","Service02","Service03")
 

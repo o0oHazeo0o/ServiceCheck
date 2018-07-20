@@ -1,0 +1,79 @@
+#Server list array
+$Servers = @("Server01.foo.com",”Server02.foo.com”,”Server03.foo.com”)
+$Services = @("IISADMIN","Service02","Service03")
+
+#Mail info
+$SMTPAddress = "smtpaddress.foo.com"
+$ToAddress = "yournamehere@foo.com"
+$FromAddress = "serverstatus@foo.com"
+
+#Service restart counter 
+$SRVCCount = 0
+
+Foreach ($Server in $Servers)
+{
+
+        Foreach ($Service in $Services)
+                {
+                
+                    #Verify that service exist on server
+                    If (Get-Service -ComputerName $Server -Name $Service -ErrorAction SilentlyContinue)
+                        {                                                            
+                            "`n"
+                            "$Service Exists on $Server"
+                            "`n"
+                            Write-Output "Checking Status of $Service..."
+                            "`n"
+                        
+                            #Get server service status
+                            $SRVCArr = Get-Service -ComputerName $Server -Name $Services -ErrorAction SilentlyContinue
+                            $SRVC = $SRVCArr | ForEach-Object {
+                            New-Object PSObject -Property @{
+                            'Service Name'= $_.Name
+                            'Service Status'= $_.Status
+                                                            }
+                                                        }
+
+                            #If service is not running, start the service, and add to counter
+                            If ($SRVC.'Service Status' -ne "Running")
+                                {
+                                    Get-Service -Name $Service -ComputerName $Server | Set-Service -Status Running
+                                
+                                    #Create new array for services that needed to be restarted
+                                    $SRVCRS = New-Object psobject
+                                    $SRVCRS | Add-Member -MemberType NoteProperty -Name "Server" -Value "$Server"
+                                    $SRVCRS | Add-Member -MemberType NoteProperty -Name "Service" -Value "$Service"
+                                    $SVEMSR = $SRVCRS.Server
+                                    $SVEMSV = $SRVCRS.Service
+
+                                    #Create e-mail body for services that were restarted
+                                    $SRVCEmailBody += "$SVEMSV had to be restarted on $SVEMSR" | Out-String
+                                 
+                                    $SRVCCount++
+                                }
+                        
+                            #If service is running, display status
+                            If ($SRVC.'Service Status' -eq "Running")
+                                {
+                                    Write-Output "$Service Service is already started"
+                                    "`n"
+                                }
+                        }
+                            
+                    #If the services does not exist on the server, display result
+                    Else {"$Service does not exist on $Server"}
+                    }
+}
+
+#If service count is less than or equal to 0, output/email everything is fine
+If ($SRVCCount -eq 0)
+    {
+        Send-MailMessage -SMTPServer $SMTPAddress -To $ToAddress -From $FromAddress -Subject “Server Status: Good” -Body ("All servers services are running as intended..." | Out-String)
+        Write-Output "`r`n All servers services are running as intended..."
+    }
+
+#If service count is greater than 0, output/email check server services
+If ($SRVCCount -gt 0)
+    {
+        Send-MailMessage -SMTPServer $SMTPAddress -To $ToAddress -From $FromAddress -Subject “Server Status: Bad” -Body ($SRVCEmailBody | Out-String)
+    }
